@@ -5,6 +5,7 @@
     <title>JOIN WebRTC channel</title>
     <link href="noserv.css" rel="stylesheet" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
+    <script src="picture.js"></script>
   </head>
   <body>
     <h2>JOIN WebRTC channel <span id="status"> init </span></h2>
@@ -22,17 +23,22 @@
       </div>
       <div id="ct">
         <input id="msg" disabled /><button id="send" disabled>send</button>
+        <button id="send-picture" disabled>send picture</button>
       </div>
+      <video id="videostream" playsinline autoplay></video>
     </div>
     <script>
       //var server       = { urls: "stun:stun.l.google.com:19302" };
       var sdpConstraints = { optional: [{ RtpDataChannels: true }] };
       var pc = new RTCPeerConnection(null);
-      var dc;
+      var textChannel;
+      const videoElement = document.querySelector("#videostream");
+      const MAX_IMAGE_SIZE = 65535;
+      const EOF_FLAG = "EOF";
 
       pc.ondatachannel = function (e) {
-        dc = e.channel;
-        dcInit(dc);
+        const channel = e.channel;
+        dcInit(channel, addMSG);
       };
       pc.onicecandidate = function (e) {
         if (e.candidate) return;
@@ -41,18 +47,11 @@
       pc.oniceconnectionstatechange = function (e) {
         var state = pc.iceConnectionState;
         $("#status").html(state);
-        if (state == "connected") $("#msg, #send").attr("disabled", false);
+        if (state === "connected") {
+          $("#msg, #send").attr("disabled", false);
+          $("#msg, #send-picture").attr("disabled", false);
+        }
       };
-
-      function dcInit(dc) {
-        dc.onopen = function () {
-          $("textarea").attr("disabled", true);
-          addMSG("CONNECTED!", "info");
-        };
-        dc.onmessage = function (e) {
-          if (e.data) addMSG(e.data, "other");
-        };
-      }
 
       function createAnswerSDP() {
         var offerDesc = new RTCSessionDescription(
@@ -73,7 +72,7 @@
       var sendMSG = function () {
         var value = $("#msg").val();
         if (value) {
-          dc.send(value);
+          textChannel.send(value);
           addMSG(value, "me");
           $("#msg").val("");
         }
@@ -94,6 +93,27 @@
         }
       });
       $("#send").click(sendMSG);
+
+      const handleUserMediaFailure = (reason) => {
+        console.error("Couldn't access user media device", reason);
+      };
+
+      const constraints = { audio: false, video: true };
+
+      const handleSuccess = (stream) => {
+        videoElement.width = 480;
+        videoElement.height = 360;
+        videoElement.srcObject = stream;
+
+        window.stream = stream;
+      };
+
+      $("#send-picture").click(() => sendPicture(pc, addMSG));
+
+      navigator.mediaDevices
+        .getUserMedia(constraints)
+        .then(handleSuccess)
+        .catch(handleUserMediaFailure);
     </script>
   </body>
 </html>
